@@ -1,0 +1,30 @@
+2021.3.14:   
+    定义了一个：
+        typedef struct _value_t {
+            //int len;
+            char data[0];
+        } VALUE_T;
+
+        *度娘说data[0]这种用法，前面得加些其它的数据成员，data[0]放在最后
+        *只有一个data[0]会有什么潜在的风险？
+
+
+    我尝试了一下这样子做：
+        typedef struct k {
+            int id;
+            std::string name;
+            //const char *name;
+            int age;
+        } k;
+
+        k p = {2018, "yyj", 21};
+        VALUE_T value;
+        memcpy(&value.data[0], &p, sizeof(k));
+        k m;
+        memcpy(&m, &value.data[0], sizeof(m));
+        std::cout << m.id << "\n " << std::cout << m.name << "\n" << m.age <<std::endl;
+
+        正确输出结果，却出现了：invaild pointer
+        注释了//string，运行无误。
+        C++ 的一些模板类该怎么样用在这种地方？
+        
