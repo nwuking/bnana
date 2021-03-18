@@ -25,6 +25,108 @@ BplusTree::BplusTree(std::string &path, bool empty)
 
         // 初始化一个空文件，即初始化一些元信息
         init_empty_file();
+        close_file();
+    }
+}
+
+BplusTree::~BplusTree() {
+    if(_opening) {
+        close_file();
+    }
+}
+
+int BplusTree::key_cmp(const KEY_T &key1, const KEY_T &key2) {
+    // 比较两个关键字的大小
+    // key1 < key2, return -1
+    // key1 == key2, return 0
+    // key1 > key2, return 1
+    int n = strcmp(key1._key, key2._key);
+    if(n < 0) {
+        return -1;
+    }
+    else if(n > 0) {
+        return 1;
+    }
+    else {
+        return n;
+    }
+}
+
+off_t BplusTree::search_leaf(const KEY_T &key) {
+    // 查找包含关键字key的叶子节点的位置
+    NODE_T node;
+    int height = _meta.height;
+    off_t res = 0;
+    bool op = false;
+
+    // 先读取跟节点
+    if((read_file(&node, _meta.root_node)) != 1) {
+        std::cout << "can't read bplusTree.cc " << __LINE__ << std::endl;
+        exit(-1);
+    }
+
+    // 循环读取，直到最后一个非叶子节点
+    while(height > 1) {
+        op = false;
+        for(int i = 0; i < node.n; ++i) {
+            if(key_cmp(key, node.children[i].key) <= 0) {
+                // key <= node.children[i].key
+                read_file(&node, node.children[i].child);
+                --height;
+                op = true;
+                break;
+            }
+        }
+        //--height;
+        if(!op) {
+            // 不存在该关键字
+            //std::cout << "can't find the key---bplusTree.cc" << __LINE__ << std::endl;
+            res = 0;
+            break;
+        }
+    }
+
+    if(op) {
+        // 此时，node的孩子节点便是叶子节点
+        for(int i = 0; i < node.n; ++i) {
+            if(key_cmp(key, node.children[i].key) <= 0) {
+                res = node.children[i].child;
+                break;
+            }
+        }
+    }
+
+    return res;
+}
+
+void BplusTree::search(const KEY_T &key, VALUE_T *value) {
+    // 查找关键字为key的value, 不存在就返回nullptr
+    LEAF_NODE_T leaf;
+
+    open_file();
+    
+    // 查找包含key的叶子节点
+    off_t leaf_off = search_leaf(key);
+    if(leaf_off == 0) {
+        value = nullptr;
+        std::cout << "the key isn't exist--bplusTree.cc" << __LINE__ << std::endl;
+    }
+    else {
+        read_file(&leaf, leaf_off);
+        for(int i = 0; i < leaf.n; ++i) {
+            // 查找资源
+            int n = key_cmp(key, leaf.record[i].key);
+            if(n == 0) {
+                // 找到关键字
+                *value = leaf.record[i].value; 
+                break;
+            }
+            if(n == 1) {
+                // 没有key的存在
+                value = nullptr;
+                break;
+            }
+        }
     }
 }
 
@@ -53,7 +155,7 @@ void BplusTree::init_empty_file() {
     
     // 初始化元信息
     _meta.order = BP_ORDER;
-    _meta.key_type = NONE;
+    //_meta.key_type = NONE;
     _meta.slot = BLOCK_OFF;
 
     // init tree root
@@ -61,6 +163,7 @@ void BplusTree::init_empty_file() {
     root_node.parent = 0;
     _meta.root_node = allocate(root_node);
     _meta.height = 1;
+    //root_node.flag = 1;                                         // 1表示其孩子节点是叶子节点
 
     //init leaf
     LEAF_NODE_T leaf_node;
@@ -70,5 +173,7 @@ void BplusTree::init_empty_file() {
     _meta.leaf_node = root_node.children[0].child = allocate(leaf_node);
 
     // 写入文件
-    
+    write_file(&_meta, META_OFF);
+    write_file(&root_node, _meta.root_node);
+    write_file(&leaf_node, root_node.children[0].child);
 }

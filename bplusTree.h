@@ -18,10 +18,10 @@ public:
     BplusTree(std::string &path, bool empty = false);
     ~BplusTree();
 
-    void search(const KEY_T &key, VALUE_T *value) const;
-    void insert(const KEY_T &key, const VALUE_T &value);
-    void pop(const KEY_T &key);
-    void update(const KEY_T &key, const VALUE_T &value);
+    void search(const KEY_T &key, VALUE_T *value);              // 查找
+    void insert(const KEY_T &key, const VALUE_T &value);        // 插入
+    void pop(const KEY_T &key);                                 // 弹出
+    void update(const KEY_T &key, const VALUE_T &value);        // 更新
 
     void open(std::string &path, const char *modes = "w+");
 private:
@@ -30,24 +30,29 @@ private:
     FILE *_fp;
     bool _opening;                                          // 记录是否以打开文件
 
-    enum KEY_TYPE {
-        NONE,
-        INT,
-        STR
-    };
+    //enum KEY_TYPE {
+    //    NONE,
+    //    INT,
+    //    STR
+    //};
 
+    int key_cmp(const KEY_T &key1, const KEY_T &key2);      // 比较两个关键字的大小
+
+    off_t search_leaf(const KEY_T &key);                    // 查找包含key的叶子节点的位置
+
+    // allocate(...), 给叶子节点、非叶子节点在文件中分配一个位置
     off_t allocate(size_t size);
 
     off_t allocate(NODE_T &node);
 
     off_t allocate(LEAF_NODE_T &node);
 
-    void init_empty_file();
+    void init_empty_file();                                 // 初始化一个空文件
 
     void close_file() {
         if(_opening) {
             fclose(_fp);
-            _opening = true;
+            _opening = false;
         }
     }
 
@@ -74,8 +79,16 @@ private:
         return read_file(block, offset, sizeof(T));
     }
 
+    int write_file(void *block, off_t offset, size_t size) {
+        fseek(_fp, offset, SEEK_SET);
+        int n = fwrite(block, size, 1, _fp);
+        return n;
+    }
+
     template<typename T>
-    int write_file(const T &block, off_t offset);
+    int write_file(const T *block, off_t offset) {
+        return write_file(block, offset, sizeof(T));
+    }
 };
 
 #endif
