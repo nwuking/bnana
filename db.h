@@ -80,6 +80,7 @@ typedef struct _index_t {
 typedef struct _node_t {
     off_t parent;
     size_t n;                                   //  children的数量
+    //int flag;                                   //  一个标志，1表示其孩子节点是叶节点
     INDEX_T children[BP_ORDER];
 } NODE_T;
 
@@ -87,7 +88,7 @@ typedef struct _node_t {
 // 定义一些有关B+树的一些元信息
 typedef struct _meta_t {
     size_t order;                               // B+树有几路
-    int key_type;                               // 关键字的type
+    //int key_type;                               // 关键字的type
     size_t node_n;                              // 非叶子节点的数量
     size_t leaf_node_n;                         // 叶子节点的数量
     size_t height;                              // 树的高度,不包括叶子节点
