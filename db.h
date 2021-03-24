@@ -97,6 +97,11 @@ typedef struct _meta_t {
     off_t leaf_node;                            // 最左边的一个叶子节点在哪
 } META_T;
 
+typedef struct _parent_t {
+    // 用于读取叶子节点或者非叶子节点的parent字段
+    off_t parent;
+} PARENT_T;
+
 
 
 
