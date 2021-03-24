@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <algorithm>
+
 BplusTree::BplusTree(std::string &path, bool empty)
     : _path(nullptr), _fp(nullptr)
 {
@@ -52,50 +54,54 @@ int BplusTree::key_cmp(const KEY_T &key1, const KEY_T &key2) {
     }
 }
 
-off_t BplusTree::search_leaf(const KEY_T &key) {
-    // 查找包含关键字key的叶子节点的位置
-    NODE_T node;
+off_t BplusTree::search_none_leaf(const KEY_T &key) {
+    // 查找包含key的最后一个非叶子节点所在的位置
     int height = _meta.height;
-    off_t res = 0;
-    bool op = false;
+    off_t res = _meta.root_node;
 
-    // 先读取跟节点
-    if((read_file(&node, _meta.root_node)) != 1) {
-        std::cout << "can't read bplusTree.cc " << __LINE__ << std::endl;
-        exit(-1);
-    }
-
-    // 循环读取，直到最后一个非叶子节点
     while(height > 1) {
-        op = false;
+        NODE_T node;
+        read_file(&node, res);
+        bool op = true;
+
         for(int i = 0; i < node.n; ++i) {
             if(key_cmp(key, node.children[i].key) <= 0) {
-                // key <= node.children[i].key
-                read_file(&node, node.children[i].child);
-                --height;
-                op = true;
+                op = false;
+                res = node.children[i].child;
                 break;
             }
         }
-        //--height;
-        if(!op) {
-            // 不存在该关键字
-            //std::cout << "can't find the key---bplusTree.cc" << __LINE__ << std::endl;
-            res = 0;
+        if(op) {
+            res = node.children[node.n-1].child;
+        }
+        --height;
+    }
+    return res;
+}
+
+off_t BplusTree::search_leaf(const KEY_T &key, off_t offset) {
+    NODE_T node;
+    read_file(&node, offset);
+    off_t res;
+
+    bool op = true;
+
+    for(int i = 0; i < node.n; ++i) {
+        if(key_cmp(key, node.children[i].key) <= 0) {
+            op = false;
+            res = node.children[i].child;
             break;
         }
     }
 
     if(op) {
-        // 此时，node的孩子节点便是叶子节点
-        for(int i = 0; i < node.n; ++i) {
-            if(key_cmp(key, node.children[i].key) <= 0) {
-                res = node.children[i].child;
-                break;
-            }
-        }
+        res = node.children[node.n-1].child;
     }
+    return res;
+}
 
+off_t BplusTree::search_leaf(const KEY_T &key) {
+    off_t res = search_leaf(key, search_none_leaf(key));
     return res;
 }
 
@@ -107,28 +113,262 @@ void BplusTree::search(const KEY_T &key, VALUE_T *value) {
     
     // 查找包含key的叶子节点
     off_t leaf_off = search_leaf(key);
-    if(leaf_off == 0) {
-        value = nullptr;
-        std::cout << "the key isn't exist--bplusTree.cc" << __LINE__ << std::endl;
-    }
-    else {
-        read_file(&leaf, leaf_off);
-        for(int i = 0; i < leaf.n; ++i) {
-            // 查找资源
-            int n = key_cmp(key, leaf.record[i].key);
-            if(n == 0) {
-                // 找到关键字
-                *value = leaf.record[i].value; 
-                break;
-            }
-            if(n == 1) {
-                // 没有key的存在
-                value = nullptr;
-                break;
-            }
+    read_file(&leaf, leaf_off);
+    for(int i = 0; i < leaf.n; ++i) {
+        // 查找资源
+        int n = key_cmp(key, leaf.record[i].key);
+        if(n == 0) {
+            // 找到关键字
+            *value = leaf.record[i].value; 
+            break;
+        }
+        if(n == 1) {
+            // 没有key的存在
+            value = nullptr;
+            break;
         }
     }
+
+    close_file();
 }
+
+/*
+template<typename T>
+void BplusTree::create_node(T *node, T *next, off_t offset) {
+    // 创建一个新节点
+    // 将node 的一些信息复制到next
+
+    next->parent = node->parent;
+    next->next = node->next;
+    next->prev = offset;
+    node->next = allocate(*next);
+
+    if(next->next != 0) {
+        T old_next;
+        read_file(&old_next, next->next, SIZE_NO_CHILDREN);
+        old_next.prev = node->next;
+        write_file(old_next, next->next, SIZE_NO_CHILDREN);
+    }
+    write_file(&_meta, META_OFF);
+}
+*/
+
+void BplusTree::insert_record_to_leaf(LEAF_NODE_T *node, const KEY_T &key, const VALUE_T &value) {
+    // 叶子节点的关键字没满
+
+    size_t new_record = node->n;
+    for(size_t i = 0; i < node->n; ++i) {
+        if(key_cmp(node->record[i].key, key) > 0) {
+            new_record = i;
+            break;
+        }
+    }
+
+    size_t op = node->n;
+    while(op > new_record) {
+        node->record[op] = node->record[op-1];
+    }
+
+    node->record[new_record].key = key;
+    node->record[new_record].value = value;
+    node->n++;
+}
+
+void BplusTree::insert_first_key_value(const KEY_T &key, const VALUE_T &value) {
+    // 插入第一个（key/value)
+    NODE_T root;
+    read_file(&root, _meta.root_node);
+
+    root.n = 1;
+    root.children[0].key = key;
+    
+    LEAF_NODE_T leaf;
+    read_file(&leaf, _meta.leaf_node);
+    leaf.n = 1;
+    leaf.record[0].key = key;
+    leaf.record[0].value = value;
+
+    // save
+    write_file(&root, _meta.root_node);
+    write_file(&leaf, _meta.leaf_node);
+
+    _meta.height = 1;
+    write_file(&_meta, META_OFF);
+}
+
+void BplusTree::create_leaf_node(LEAF_NODE_T *old_leaf, LEAF_NODE_T *new_leaf, off_t offset) {
+    new_leaf->parent = old_leaf->parent;
+    new_leaf->next = offset;
+    new_leaf->prev = old_leaf->prev;
+
+    off_t n = allocate(*new_leaf);
+
+    if(offset == _meta.leaf_node) {
+        _meta.leaf_node = n;
+        write_file(&_meta, META_OFF);
+    }
+    else {
+        LEAF_NODE_T node;
+        read_file(&node, new_leaf->prev);
+        node.next = n;
+        write_file(&node, new_leaf->prev);
+    }
+}
+
+void BplusTree::insert_key_to_node(NODE_T *node, const KEY_T &key, off_t offset) {
+    // node非叶子节点， 没满，直接插入
+    size_t insert_point = node->n;
+    size_t n = node->n;
+
+    while(--n >= 0) {
+        if(key_cmp(key, node->children[n].key) < 0) {
+            node->children[insert_point] = node->children[n];
+            --insert_point;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    node->n++;
+    node->children[insert_point].key = key;
+    node->children[insert_point].child = offset;
+}
+
+void BplusTree::create_node(NODE_T *old_node, NODE_T *new_node, off_t *offset) {
+    // 创建一个新的非叶子节点
+    new_node->parent = old_node->parent;
+    off_t where = allocate(*new_node);
+    *offset = where;
+}
+
+void BplusTree::update_children(NODE_T &node, off_t offset) {
+    // 更新node节点的孩子节点指向的父节点offset
+    for(int i = 0; i < node.n; ++i) {
+        PARENT_T parent;
+        read_file(&parent, node.children[i].child);
+        parent.parent = offset;
+        write_file(&parent, node.children[i].child);
+    }
+}
+
+void BplusTree::update_parent(const KEY_T &key, off_t parent_offset, off_t offset) {
+    // 
+    NODE_T parent_node;
+    read_file(&parent_node, parent_offset);
+
+    if(parent_node.n != _meta.order) {
+        insert_key_to_node(&parent_node, key, offset);
+        return;
+    }
+    else {
+        // 递归更新
+        NODE_T new_node;
+        off_t new_off;
+        create_node(&parent_node, &new_node, &new_off);
+
+        // 分裂非叶子节点
+        size_t point = parent_node.n / 2;
+        bool place_right = key_cmp(key, parent_node.children[point].key) <= 0;
+        if(place_right)
+            --point;
+
+        std::copy(parent_node.children, parent_node.children+point+1, new_node.children);
+        std::copy(parent_node.children+point+1, parent_node.children+parent_node.n, parent_node.children);
+        parent_node.n = parent_node.n - point - 1;
+        new_node.n = point + 1;
+
+        if(place_right) {
+            insert_key_to_node(&new_node, key, offset);
+        }
+        else {
+            insert_key_to_node(&parent_node, key, offset);
+        }
+
+        // save
+        write_file(&new_node, new_off);
+        write_file(&parent_node, parent_offset);
+
+        update_children(new_node, new_off);
+
+        // 递归更新上一个父节点
+        update_parent(new_node.children[new_node.n-1].key, new_node.parent, new_off);
+    }
+}
+
+bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
+    // 插入一对(key/value)
+    open_file();
+
+    if(_meta.height == 0) {
+        // 此时为空
+        insert_first_key_value(key, value);
+        close_file();
+        return true;
+    }
+
+    off_t parent = search_none_leaf(key);
+    off_t offset = search_leaf(key, parent);
+
+    LEAF_NODE_T leaf_node;
+    read_file(&leaf_node, offset);
+
+    // 查找是否以存在相同的关键字
+    int op = -1;
+    for(int i = 0; i < leaf_node.n; ++i) {
+        if(key_cmp(key, leaf_node.record[i].key) == 0) {
+            op = 0;
+            break;
+        }
+        else if(key_cmp(key, leaf_node.record[i].key) > 0) {
+            break;
+        }
+    }
+    if(op == 0) {
+        // 以存在关键字，插入失败
+        return false;
+    }
+
+    if(leaf_node.n == _meta.order) {
+        // 该节点中的关键字已满
+        // 需要对其进行分裂
+
+        LEAF_NODE_T new_leaf_node;
+        //create_node(&leaf_node, &new_leaf_node, offset);
+        create_leaf_node(&leaf_node, &new_leaf_node, offset);
+
+        size_t point = leaf_node.n / 2;
+        bool place_right = key_cmp(key, leaf_node.record[point].key) <= 0;
+        if(place_right) 
+            --point;
+        
+        //std::copy(leaf_node.record+point, leaf_node.record+leaf_node.n, new_leaf_node.record);
+        std::copy(leaf_node.record, leaf_node.record+point+1, new_leaf_node.record);
+        std::copy(leaf_node.record+point+1, leaf_node.record+leaf_node.n, leaf_node.record);
+        //new_leaf_node.n = leaf_node.n - point;
+        //leaf_node.n = point;
+        new_leaf_node.n = point + 1;
+        leaf_node.n = leaf_node.n - point-1;
+
+        if(place_right) {
+            insert_record_to_leaf(&new_leaf_node, key, value);
+        }
+        else {
+            insert_record_to_leaf(&leaf_node, key, value);
+        }
+
+        // save leaf
+        write_file(&leaf_node, offset);
+        write_file(&new_leaf_node, leaf_node.prev);
+
+        // 更新父节点
+        update_parent(new_leaf_node.record[new_leaf_node.n-1].key, new_leaf_node.parent, leaf_node.prev);
+    }
+
+    close_file();
+}
+
 
 off_t BplusTree::allocate(size_t size) {
     off_t slot = _meta.slot;
@@ -162,7 +402,7 @@ void BplusTree::init_empty_file() {
     NODE_T root_node;
     root_node.parent = 0;
     _meta.root_node = allocate(root_node);
-    _meta.height = 1;
+    _meta.height = 0;
     //root_node.flag = 1;                                         // 1表示其孩子节点是叶子节点
 
     //init leaf

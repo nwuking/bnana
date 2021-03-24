@@ -11,6 +11,7 @@
 
 #define META_OFF 0
 #define BLOCK_OFF META_OFF+sizeof(META_T)
+#define SIZE_NO_CHILDREN sizeof(LEAF_NODE_T)-BP_ORDER*sizeof(RECORD_T)
 
 class BplusTree
 {
@@ -19,7 +20,7 @@ public:
     ~BplusTree();
 
     void search(const KEY_T &key, VALUE_T *value);              // 查找
-    void insert(const KEY_T &key, const VALUE_T &value);        // 插入
+    bool insert(const KEY_T &key, const VALUE_T value);        // 插入
     void pop(const KEY_T &key);                                 // 弹出
     void update(const KEY_T &key, const VALUE_T &value);        // 更新
 
@@ -36,7 +37,28 @@ private:
     //    STR
     //};
 
+    void update_children(NODE_T &node, off_t offset);
+
+    void create_node(NODE_T *old_node, NODE_T *new_node, off_t *offset);
+
+    void update_parent(const KEY_T &key, off_t parent_offset, off_t offset);
+
+    void create_leaf_node(LEAF_NODE_T *old_leaf, LEAF_NODE_T *new_leaf, off_t offset);
+
+    void insert_first_key_value(const KEY_T &key, const VALUE_T &value);
+
+    void insert_key_to_node(NODE_T *node, const KEY_T &key, off_t offset);
+
+    void insert_record_to_leaf(LEAF_NODE_T *node, const KEY_T &key, const VALUE_T &value);
+
+    template<typename T>
+    void create_node(T *node, T *next, off_t offset);       // 创建一个新节点
+
     int key_cmp(const KEY_T &key1, const KEY_T &key2);      // 比较两个关键字的大小
+
+    off_t search_none_leaf(const KEY_T &key);               // 查找包含key的最后一个非叶子节点所在的位置
+
+    off_t search_leaf(const KEY_T &key, off_t offset);
 
     off_t search_leaf(const KEY_T &key);                    // 查找包含key的叶子节点的位置
 
