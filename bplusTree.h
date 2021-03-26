@@ -16,15 +16,22 @@
 class BplusTree
 {
 public:
-    BplusTree(std::string &path, bool empty = false);
+    BplusTree(const std::string &path, bool empty = true);
     ~BplusTree();
+
+    void print() {
+        std::cout << "height:" << _meta.height << "\n";
+        std::cout << "node_n:" << _meta.node_n << "\n";
+        std::cout << "order:" << _meta.order << "\n";
+        std::cout << "leaf_node_n:" << _meta.leaf_node_n << std::endl;  
+    }
 
     void search(const KEY_T &key, VALUE_T *value);              // 查找
     bool insert(const KEY_T &key, const VALUE_T value);        // 插入
-    void pop(const KEY_T &key);                                 // 弹出
-    void update(const KEY_T &key, const VALUE_T &value);        // 更新
+    //void pop(const KEY_T &key);                                 // 弹出
+    //void update(const KEY_T &key, const VALUE_T &value);        // 更新
 
-    void open(std::string &path, const char *modes = "w+");
+    //void open(std::string &path, const char *modes = "w+");
 private:
     META_T _meta;                                           // B+树的元信息
     std::string _path;                                      // 储存文件的路径
@@ -36,6 +43,10 @@ private:
     //    INT,
     //    STR
     //};
+
+    void update_parent_no_split(const KEY_T &key, off_t parent);
+
+    off_t create_new_root_node(NODE_T &node);
 
     void update_children(NODE_T &node, off_t offset);
 
@@ -90,7 +101,7 @@ private:
     }
 
     int read_file(void *block, off_t offset, size_t size) {
-        open_file();
+        //open_file();
         fseek(_fp, offset, SEEK_SET);
         int n = fread(block, size, 1, _fp);
         return n;
@@ -108,7 +119,7 @@ private:
     }
 
     template<typename T>
-    int write_file(const T *block, off_t offset) {
+    int write_file(T *block, off_t offset) {
         return write_file(block, offset, sizeof(T));
     }
 };
