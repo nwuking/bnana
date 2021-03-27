@@ -16,7 +16,7 @@
 class BplusTree
 {
 public:
-    BplusTree(const std::string &path, bool empty = true);
+    BplusTree(const std::string &path, bool empty = false);
     ~BplusTree();
 
     void print() {
@@ -50,7 +50,7 @@ private:
 
     void update_children(NODE_T &node, off_t offset);
 
-    void create_node(NODE_T *old_node, NODE_T *new_node, off_t *offset);
+    off_t create_node(NODE_T *old_node, NODE_T *new_node);
 
     void update_parent(const KEY_T &key, off_t parent_offset, off_t offset);
 
@@ -62,8 +62,10 @@ private:
 
     void insert_record_to_leaf(LEAF_NODE_T *node, const KEY_T &key, const VALUE_T &value);
 
+    /*
     template<typename T>
     void create_node(T *node, T *next, off_t offset);       // 创建一个新节点
+    */
 
     int key_cmp(const KEY_T &key1, const KEY_T &key2);      // 比较两个关键字的大小
 
@@ -84,12 +86,13 @@ private:
 
     void close_file() {
         if(_opening) {
+            fflush(_fp);
             fclose(_fp);
             _opening = false;
         }
     }
 
-    void open_file(const char *modes = "w+") {
+    void open_file(const char *modes = "r+") {
         if(!_opening) {
             _fp = fopen(_path.c_str(), modes);
             if(!_fp) {
@@ -115,6 +118,7 @@ private:
     int write_file(void *block, off_t offset, size_t size) {
         fseek(_fp, offset, SEEK_SET);
         int n = fwrite(block, size, 1, _fp);
+        std::cout << "n" << n << std::endl;
         return n;
     }
 

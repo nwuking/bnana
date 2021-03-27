@@ -4,8 +4,14 @@
 
 #include <algorithm>
 
+/// META_T _meta;                                           // B+树的元信息
+/// std::string _path;                                      // 储存文件的路径
+/// FILE *_fp;
+/// bool _opening;                                          // 记录是否以打开文件
+
+
 BplusTree::BplusTree(const std::string &path, bool empty)
-    : _path(path), _fp(nullptr)
+    : _path(path), _fp(nullptr), _opening(false)
 {
     /* 打开一个文件，获取其元信息
      * 如果文件不存在或者文件为空，先为其添加一些基本的元信息
@@ -15,11 +21,13 @@ BplusTree::BplusTree(const std::string &path, bool empty)
 
     if(!empty) {
         // 默认所打开的文件不为空，读取文件的meta
+        open_file();
         if(read_file(&_meta, META_OFF) != 1) {
             // 读取失败，文件为空
             empty = true;
-            close_file();
+            //close_file();
         }
+        close_file();
     }
     if(empty) {
         // 文件为空， 初始化一个文件
@@ -164,9 +172,10 @@ void BplusTree::insert_record_to_leaf(LEAF_NODE_T *node, const KEY_T &key, const
         }
     }
 
-    size_t op = node->n;
-    while(op > new_record) {
-        node->record[op] = node->record[op-1];
+    size_t op = node->n-1;
+    while(op >= new_record) {
+        node->record[op+1] = node->record[op];
+        --op;
     }
 
     node->record[new_record].key = key;
@@ -201,18 +210,20 @@ void BplusTree::create_leaf_node(LEAF_NODE_T *old_leaf, LEAF_NODE_T *new_leaf, o
     new_leaf->next = offset;
     new_leaf->prev = old_leaf->prev;
 
-    off_t n = allocate(*new_leaf);
+    off_t new_offset = allocate(*new_leaf);
+    _meta.leaf_node_n++;
 
     if(offset == _meta.leaf_node) {
-        _meta.leaf_node = n;
+        _meta.leaf_node = new_offset;
         write_file(&_meta, META_OFF);
     }
     else {
         LEAF_NODE_T node;
         read_file(&node, new_leaf->prev);
-        node.next = n;
+        node.next = new_offset;
         write_file(&node, new_leaf->prev);
     }
+    old_leaf->prev = new_offset;
 }
 
 void BplusTree::insert_key_to_node(NODE_T *node, const KEY_T &key, off_t offset) {
@@ -236,11 +247,12 @@ void BplusTree::insert_key_to_node(NODE_T *node, const KEY_T &key, off_t offset)
     node->children[insert_point].child = offset;
 }
 
-void BplusTree::create_node(NODE_T *old_node, NODE_T *new_node, off_t *offset) {
+off_t BplusTree::create_node(NODE_T *old_node, NODE_T *new_node) {
     // 创建一个新的非叶子节点
     new_node->parent = old_node->parent;
-    off_t where = allocate(*new_node);
-    *offset = where;
+    new_node->n = 0;
+    bzero(new_node->children, sizeof(new_node->children));
+    return allocate(*new_node);
 }
 
 void BplusTree::update_children(NODE_T &node, off_t offset) {
@@ -271,13 +283,14 @@ void BplusTree::update_parent(const KEY_T &key, off_t parent_offset, off_t offse
 
     if(parent_node.n != _meta.order) {
         insert_key_to_node(&parent_node, key, offset);
+        write_file(&parent_node, parent_offset);
         return;
     }
     else {
         // 递归更新
         NODE_T new_node;
         off_t new_off;
-        create_node(&parent_node, &new_node, &new_off);
+        new_off = create_node(&parent_node, &new_node);
 
         // 分裂非叶子节点
         size_t point = parent_node.n / 2;
@@ -336,6 +349,8 @@ bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
     // 插入一对(key/value)
     open_file();
 
+    std::cout << "start insert\n";
+
     if(_meta.height == 0) {
         // 此时为空
         insert_first_key_value(key, value);
@@ -376,7 +391,7 @@ bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
         create_leaf_node(&leaf_node, &new_leaf_node, offset);
 
         size_t point = leaf_node.n / 2;
-        bool place_right = key_cmp(key, leaf_node.record[point].key) <= 0;
+        bool place_right = key_cmp(key, leaf_node.record[point].key) < 0;
         if(place_right) 
             --point;
         
@@ -401,6 +416,10 @@ bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
 
         // 更新父节点
         update_parent(new_leaf_node.record[new_leaf_node.n-1].key, new_leaf_node.parent, leaf_node.prev);
+
+        if(key_cmp(key, leaf_node.record[leaf_node.n-1].key) == 0) {
+            update_parent_no_split(key, parent);
+        }
     }
     else {
         // 关键字没满，直接插入
@@ -429,6 +448,7 @@ bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
     }
 
     close_file();
+    return true;
 }
 
 
@@ -453,12 +473,14 @@ off_t BplusTree::allocate(LEAF_NODE_T &node) {
 
 void BplusTree::init_empty_file() {
     // 初始化文件的元信息，写入文件开始处
-    bzero(&_meta, sizeof(_meta));
+    bzero(&_meta, sizeof(META_T));
     
     // 初始化元信息
     _meta.order = BP_ORDER;
     //_meta.key_type = NONE;
     _meta.slot = BLOCK_OFF;
+    _meta.node_n = 0;
+    _meta.leaf_node_n = 0;
 
     // init tree root
     NODE_T root_node;
@@ -478,4 +500,6 @@ void BplusTree::init_empty_file() {
     write_file(&_meta, META_OFF);
     write_file(&root_node, _meta.root_node);
     write_file(&leaf_node, root_node.children[0].child);
+
+    //fflush(_fp);
 }
