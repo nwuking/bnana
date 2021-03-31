@@ -44,7 +44,7 @@ private:
     //    STR
     //};
 
-    void update_parent_no_split(const KEY_T &key, off_t parent);
+    void update_parent_no_split(const KEY_T &key, off_t parent, KEY_T &parent_key);
 
     off_t create_new_root_node(NODE_T &node);
 
@@ -85,21 +85,19 @@ private:
     void init_empty_file();                                 // 初始化一个空文件
 
     void close_file() {
+        fflush(_fp);
         if(_opening) {
-            fflush(_fp);
             fclose(_fp);
             _opening = false;
         }
     }
 
-    void open_file(const char *modes = "r+") {
+    void open_file(const char *modes = "rb+") {
         if(!_opening) {
             _fp = fopen(_path.c_str(), modes);
-            if(!_fp) {
-                std::cout << "can't open file" << std::endl;
-                exit(-1);
+            if(_fp) {
+               _opening = true; 
             }
-            _opening = true;
         }
     }
 
@@ -118,7 +116,6 @@ private:
     int write_file(void *block, off_t offset, size_t size) {
         fseek(_fp, offset, SEEK_SET);
         int n = fwrite(block, size, 1, _fp);
-        std::cout << "n" << n << std::endl;
         return n;
     }
 
