@@ -115,18 +115,21 @@ void BplusTree::search(const KEY_T &key, VALUE_T *value) {
     read_file(&leaf, leaf_off);
     for(int i = 0; i < leaf.n; ++i) {
         // 查找资源
+        std::cout << "search:" << leaf.record[i].key._key << ":" << leaf.record[i].value << "\n";
         int n = key_cmp(key, leaf.record[i].key);
+        std::cout << "n:" << n << "\n";
         if(n == 0) {
             // 找到关键字
             memcpy(value, &leaf.record[i].value, sizeof(VALUE_T));
             //*value = leaf.record[i].value; 
             break;
         }
+        /*
         if(n == 1) {
             // 没有key的存在
             value = nullptr;
             break;
-        }
+        }*/
     }
 
     close_file();
@@ -167,12 +170,15 @@ void BplusTree::insert_first_key_value(const KEY_T &key, const VALUE_T &value) {
     read_file(&root, _meta.root_node);
 
     root.n = 1;
+    //memcpy(&root.children[0].key, &key, sizeof(KEY_T));
     root.children[0].key = key;
     
     LEAF_NODE_T leaf;
     read_file(&leaf, root.children[0].child);
     leaf.n = 1;
+    //memcpy(&leaf.record[0].key, &key, sizeof(KEY_T));
     leaf.record[0].key = key;
+    //memcpy(&leaf.record[0].value, &value, sizeof(VALUE_T));
     leaf.record[0].value = value;
 
     // save
@@ -342,10 +348,10 @@ void BplusTree::update_parent_no_split(const KEY_T &key, off_t parent, KEY_T &pa
     for(int i = 0; i < node.n; ++i) {
         if(key_cmp(parent_key, node.children[i].key) == 0) {
             cmp_point = i;
-            memcpy(&old_key, &node.children[i].key, sizeof(KEY_T));
-            //old_key = node.children[i].key;
-            memcpy(&node.children[i].key, &key, sizeof(KEY_T));
-            //node.children[i].key = key;
+            //memcpy(&old_key, &node.children[i].key, sizeof(KEY_T));
+            old_key = node.children[i].key;
+            //memcpy(&node.children[i].key, &key, sizeof(KEY_T));
+            node.children[i].key = key;
             break;
         }
     }
@@ -378,7 +384,6 @@ bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
     read_file(&leaf_node, offset);
 
     // 查找是否以存在相同的关键字
-    //std::cout << leaf_node.n << std::endl;
     for(int j = 0; j < leaf_node.n; ++j) {
         if(key_cmp(key, leaf_node.record[j].key) == 0) {
             // 存在相同的关键字， return false
@@ -446,23 +451,27 @@ bool BplusTree::insert(const KEY_T &key, VALUE_T value) {
             }
         }
         for(int i = leaf_node.n-1; i >= insert_point; --i) {
-            memcpy(&leaf_node.record[i+1].key, &leaf_node.record[i].key, sizeof(KEY_T));
-            //leaf_node.record[i+1].key = leaf_node.record[i].key;
-            memcpy(&leaf_node.record[i+1].value, &leaf_node.record[i].value, sizeof(VALUE_T));
-            //leaf_node.record[i+1].value = leaf_node.record[i].value;
+            //bzero(&leaf_node.record[i+1].key, sizeof(KEY_T));
+            //memcpy(&leaf_node.record[i+1].key, &leaf_node.record[i].key, sizeof(KEY_T));
+            leaf_node.record[i+1].key = leaf_node.record[i].key;
+            //bzero(&leaf_node.record[i+1].value, sizeof(VALUE_T));
+            //memcpy(&leaf_node.record[i+1].value, &leaf_node.record[i].value, sizeof(VALUE_T));
+            leaf_node.record[i+1].value = leaf_node.record[i].value;
         }
-        memcpy(&leaf_node.record[insert_point].key, &key, sizeof(KEY_T));
-        //leaf_node.record[insert_point].key = key;
-        memcpy(&leaf_node.record[insert_point].value, &value, sizeof(VALUE_T));
-        //leaf_node.record[insert_point].value = value;
+        //bzero(&leaf_node.record[insert_point].key, sizeof(KEY_T));
+        //memcpy(&leaf_node.record[insert_point].key, &key, sizeof(KEY_T));
+        leaf_node.record[insert_point].key = key;
+        //bzero(&leaf_node.record[insert_point].value, sizeof(VALUE_T));
+        //memcpy(&leaf_node.record[insert_point].value, &value, sizeof(VALUE_T));
+        leaf_node.record[insert_point].value = value;
         ++leaf_node.n;
+
+         // save
+        write_file(&leaf_node, offset);
 
         if(insert_point == leaf_node.n-1) {
             update_parent_no_split(key, parent, leaf_node.record[insert_point-1].key);
         }
-
-        // save
-        write_file(&leaf_node, offset);
     }
 
     close_file();
@@ -501,12 +510,14 @@ void BplusTree::init_empty_file() {
 
     // init tree root
     NODE_T root_node;
+    bzero(&root_node, sizeof(NODE_T));
     root_node.parent = 0;
     _meta.root_node = allocate(root_node);
     _meta.height = 0;
 
     //init leaf
     LEAF_NODE_T leaf_node;
+    bzero(&leaf_node, sizeof(LEAF_NODE_T));
     leaf_node.next = 0;
     leaf_node.prev = 0;
     leaf_node.parent = _meta.root_node;
@@ -516,4 +527,5 @@ void BplusTree::init_empty_file() {
     write_file(&_meta, META_OFF);
     write_file(&root_node, _meta.root_node);
     write_file(&leaf_node, root_node.children[0].child);
+
 }
