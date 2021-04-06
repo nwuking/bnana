@@ -10,7 +10,7 @@
 #include <stdlib.h>
 
 #define META_OFF 0
-#define BLOCK_OFF META_OFF+sizeof(META_T)
+#define BLOCK_OFF META_OFF + sizeof(META_T)
 #define SIZE_NO_CHILDREN sizeof(LEAF_NODE_T)-BP_ORDER*sizeof(RECORD_T)
 
 class BplusTree
@@ -19,19 +19,18 @@ public:
     BplusTree(const std::string &path, bool empty = false);
     ~BplusTree();
 
-    void print() {
-        std::cout << "height:" << _meta.height << "\n";
-        std::cout << "node_n:" << _meta.node_n << "\n";
-        std::cout << "order:" << _meta.order << "\n";
-        std::cout << "leaf_node_n:" << _meta.leaf_node_n << std::endl;  
-    }
+    //void print() {
+    //    std::cout << "height:" << _meta.height << "\n";
+    //    std::cout << "node_n:" << _meta.node_n << "\n";
+    //    std::cout << "order:" << _meta.order << "\n";
+    //    std::cout << "leaf_node_n:" << _meta.leaf_node_n << std::endl;  
+    //}
 
     void search(const KEY_T &key, VALUE_T *value);              // 查找
-    bool insert(const KEY_T &key, const VALUE_T value);        // 插入
-    //void pop(const KEY_T &key);                                 // 弹出
-    //void update(const KEY_T &key, const VALUE_T &value);        // 更新
+    bool insert(const KEY_T &key, const VALUE_T value);         // 插入
+    void pop(KEY_T &key);                                       // 弹出
+    bool update(const KEY_T &key, const VALUE_T &value);        // 更新
 
-    //void open(std::string &path, const char *modes = "w+");
 private:
     META_T _meta;                                           // B+树的元信息
     std::string _path;                                      // 储存文件的路径
@@ -61,11 +60,6 @@ private:
     void insert_key_to_node(NODE_T *node, const KEY_T &key, off_t offset);
 
     void insert_record_to_leaf(LEAF_NODE_T *node, const KEY_T &key, const VALUE_T &value);
-
-    /*
-    template<typename T>
-    void create_node(T *node, T *next, off_t offset);       // 创建一个新节点
-    */
 
     int key_cmp(const KEY_T &key1, const KEY_T &key2);      // 比较两个关键字的大小
 
@@ -116,6 +110,7 @@ private:
     int write_file(void *block, off_t offset, size_t size) {
         fseek(_fp, offset, SEEK_SET);
         int n = fwrite(block, size, 1, _fp);
+        fflush(_fp);
         return n;
     }
 

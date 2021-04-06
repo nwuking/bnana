@@ -12,7 +12,7 @@
 
 
 #define KEY_SIZE 10
-#define BP_ORDER 10                                  // B+ 树中，一个节点最多拥有的关键字
+#define BP_ORDER 3                                   // B+ 树中，一个节点最多拥有的关键字
 
 /*
  * 定义key的类型，key的储存类型为char[]，大小为KEY_SIZE
@@ -39,11 +39,13 @@ typedef struct _key_t {
 } KEY_T;
 
 
-// 定义value                     
-typedef struct _value_t {
-    //int len;
-    char data[0];
-} VALUE_T;
+// 定义value          
+typedef int VALUE_T;           
+//typedef struct _value_t {
+//    int len;
+//    _value_t(int v = 0) : len(v) {}
+    //char data[0];
+//} VALUE_T;
 // VALUE_T的使用：
 //      比如你想存储一个学生的基本信息，你可以：
 //          struct student {
@@ -65,7 +67,7 @@ typedef struct _leaf_node_t {
     off_t parent;                   // 父节点的偏移量
     off_t next;                     // 下一个（右边）叶子节点的偏移量
     off_t prev;                     // 前一个（左边）叶子节点的偏移量
-    size_t n;                       // record的数量
+    int n;                       // record的数量
     RECORD_T record[BP_ORDER];
 } LEAF_NODE_T;
 
@@ -79,7 +81,7 @@ typedef struct _index_t {
 // 定义非叶子节点
 typedef struct _node_t {
     off_t parent;
-    size_t n;                                   //  children的数量
+    int n;                                   //  children的数量
     //int flag;                                   //  一个标志，1表示其孩子节点是叶节点
     INDEX_T children[BP_ORDER];
 } NODE_T;
@@ -87,11 +89,10 @@ typedef struct _node_t {
 
 // 定义一些有关B+树的一些元信息
 typedef struct _meta_t {
-    size_t order;                               // B+树有几路
-    //int key_type;                               // 关键字的type
-    size_t node_n;                              // 非叶子节点的数量
-    size_t leaf_node_n;                         // 叶子节点的数量
-    size_t height;                              // 树的高度,不包括叶子节点
+    int order;                               // B+树有几路
+    int node_n;                              // 非叶子节点的数量
+    int leaf_node_n;                         // 叶子节点的数量
+    int height;                              // 树的高度,不包括叶子节点
     off_t slot;                                 // new block to write
     off_t root_node;                            // 根节点在哪
     off_t leaf_node;                            // 最左边的一个叶子节点在哪
@@ -100,6 +101,7 @@ typedef struct _meta_t {
 typedef struct _parent_t {
     // 用于读取叶子节点或者非叶子节点的parent字段
     off_t parent;
+    //char zero[]
 } PARENT_T;
 
 
